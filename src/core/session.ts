@@ -19,6 +19,7 @@ import { computeMetrics, explainUnscheduled } from './metrics';
 import { replan, Disruption, ReplanDiff, ReplanOptions } from './replan';
 import { ScheduleEngine } from './engine';
 import { Dataset, Metrics, Schedule } from './types';
+import { upcomingRisks, Risk } from './risks';
 
 export interface SessionStep {
   disruptions: Disruption[];
@@ -33,6 +34,8 @@ export interface SessionView {
   unscheduledBreakdown: ReturnType<typeof explainUnscheduled>;
   /** Diff for the final step only, which is what a preview wants to show. */
   lastDiff: ReplanDiff | null;
+  /** What is about to break, computed from the coordinator's current time. */
+  risks: Risk[];
   rebuildMs: number;
 }
 
@@ -44,6 +47,7 @@ export function runSession(
   config: SessionConfig,
   history: SessionStep[],
   pending?: SessionStep,
+  now = 0,
 ): SessionView {
   const t0 = Date.now();
   const dataset = generateDataset(config.seed);
@@ -69,6 +73,7 @@ export function runSession(
     metrics: computeMetrics(dataset, schedule),
     unscheduledBreakdown: explainUnscheduled(dataset, schedule),
     lastDiff: pending ? lastDiff : null,
+    risks: upcomingRisks(engine, schedule, now),
     rebuildMs: Date.now() - t0,
   };
 }

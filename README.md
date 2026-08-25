@@ -9,7 +9,7 @@ npm run dev      # the coordinator's console at localhost:3000
 npm run demo     # generate a dataset and schedule it, print metrics
 npm run disrupt  # run the "biggest recruiter is 3 hours late" scenario
 npm run stress   # 450+ randomised replans, asserting invariants
-npm run check    # typecheck + all three test scripts
+npm run check    # typecheck + every test script below
 ```
 
 No database and no network. The whole thing runs off a laptop, which is the
@@ -168,6 +168,26 @@ The stress test found two real bugs that the happy path never touched:
 
 ## The console
 
+Three things on screen: current state across the top, what is about to break in
+the strip above the grid, and the grid itself.
+
+**Upcoming conflicts** are forward looking on purpose. Clashes and double
+bookings are zero by construction, so listing them would be a row that is always
+empty. What actually collapses a placement day is a schedule that is legal right
+now and one delay away from not being:
+
+- a panel with seven back-to-back interviews and no slack, where one overrun
+  pushes everyone behind it
+- a student with exactly the minimum turnaround, crossing between blocks with no
+  margin to absorb anything
+- a student sitting on campus for four hours between two interviews
+- a company with panel time left and students who never got a slot
+
+Repetition is collapsed before ranking. Twenty students on a minimum turnaround
+is one fact about the day, not twenty alerts, so each kind shows at most two
+named cases plus a count of the rest. A panel that repeats the same sentence six
+times trains the coordinator to stop reading it.
+
 State is a pure fold over `(seed, ordered disruption log)`. Nothing is mutated
 in place.
 
@@ -196,6 +216,7 @@ src/core/
   scheduler.ts  initial build, greedy insertion + bounded repair
   replan.ts     disruption handling, three rings, diff, escalations
   metrics.ts    metrics + independent invariant verification
+  risks.ts      forward-looking conflict detection
   session.ts    deterministic replay for preview and undo
 app/            coordinator console
 scripts/        demo, disruption scenario, fuzz test, checks
@@ -208,6 +229,11 @@ scripts/        demo, disruption scenario, fuzz test, checks
   a dual variable, and the coordinator needs a reason she can read out loud.
 - Ring 2 displacement is depth 1. Deeper search buys a few points of coverage
   and makes the change summary unreadable.
+- Panels can drop but not merge. Merging two panels mid-day is a real thing that
+  happens and is not implemented; it would need a rule for which panel's
+  bookings survive.
+- Replan is two clicks, not one: preview then apply. A tool that rewrites
+  people's day should not commit on a single click.
 - Single interview round per company. Multi-round drives would need dependencies
   between a student's slots on the same day.
 - Companies are pinned to their preferred day. Moving a company across days is

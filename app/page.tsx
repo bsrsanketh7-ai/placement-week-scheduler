@@ -61,13 +61,13 @@ export default function Dashboard() {
   };
 
   // Committed state. Recomputed from the disruption log, never mutated.
-  const committed = useMemo(() => runSession(config, history), [history]);
+  const committed = useMemo(() => runSession(config, history, undefined, now), [history, now]);
 
   // Preview state: the same log with the draft appended. Both exist at once,
   // which is what lets the grid show before and after together.
   const preview = useMemo(() => {
     if (!previewing || draft.length === 0) return null;
-    return runSession(config, history, { disruptions: draft, at: now });
+    return runSession(config, history, { disruptions: draft, at: now }, now);
   }, [previewing, draft, history, now]);
 
   const view = preview ?? committed;
@@ -354,6 +354,18 @@ export default function Dashboard() {
               );
             })}
           </div>
+
+          {view.risks.length > 0 && (
+            <div className="risks">
+              <span className="eyebrow risks-title">What breaks next</span>
+              {view.risks.map((r) => (
+                <div key={r.id} className={`risk ${r.severity.toLowerCase()}`} title={r.detail}>
+                  <span className="risk-head">{r.headline}</span>
+                  <span className="risk-detail">{r.detail}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="gridwrap">
             <div className="timeline">

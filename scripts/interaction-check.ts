@@ -92,6 +92,17 @@ check('the NOW label appears exactly once', $$('.nowline.labelled').length === 1
 check('no summary before previewing', $('.summary') === null);
 check('no ghosts before previewing', $$('.ghost').length === 0);
 
+/* ---------- upcoming conflicts ---------- */
+// Requirement 4 asks for upcoming conflicts, not just current state. These are
+// schedules that are legal right now and one delay away from not being.
+check('the upcoming conflicts strip is present', $('.risks') !== null);
+check('conflicts are listed', $$('.risk').length > 0, `${$$('.risk').length} risks`);
+check('each conflict explains itself',
+  $$('.risk').every((r) => (r.querySelector('.risk-detail')?.textContent ?? '').length > 20));
+check('conflicts are severity ranked',
+  $$('.risk').length === 0 || $$('.risk')[0].className.includes('high')
+  || $$('.risk')[0].className.includes('medium'));
+
 /* ---------- the unplaced breakdown ---------- */
 // The brief is explicit that nothing may fail silently, so the unplaced count
 // has to be openable and every entry has to carry a stated reason.

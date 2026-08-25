@@ -144,6 +144,59 @@ html, body {
 .daytab .cov { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
 .daytab.strained .cov { color: var(--red); }
 
+/* ---------- upcoming conflicts ---------- */
+
+/*
+ * Sits directly above the grid, because it is the thing a coordinator should
+ * read before she reads anything else. Severity is carried by the left rule
+ * only: a full amber or red fill across four cards would make the whole
+ * console look like it is on fire, which is exactly the wrong signal for
+ * "legal but fragile".
+ */
+.risks {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--panel);
+  overflow-x: auto;
+}
+
+.risks-title {
+  flex: 0 0 auto;
+  align-self: center;
+  padding-right: 6px;
+  max-width: 62px;
+  line-height: 1.25;
+}
+
+.risk {
+  flex: 0 1 260px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 10px;
+  border-radius: 3px;
+  background: var(--panel-sunk);
+  border-left: 3px solid var(--rule-strong);
+}
+.risk.high { border-left-color: var(--red); background: var(--red-wash); }
+.risk.medium { border-left-color: var(--amber); background: var(--amber-wash); }
+.risk.low { border-left-color: var(--blue); background: var(--blue-wash); }
+
+.risk-head { font-size: 12px; font-weight: 600; line-height: 1.25; }
+.risk-detail {
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* ---------- grid ---------- */
 
 .gridwrap { flex: 1; overflow: auto; padding: 14px 20px 24px; }
