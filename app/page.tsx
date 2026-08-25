@@ -357,13 +357,18 @@ export default function Dashboard() {
 
           {view.risks.length > 0 && (
             <div className="risks">
-              <span className="eyebrow risks-title">What breaks next</span>
-              {view.risks.map((r) => (
-                <div key={r.id} className={`risk ${r.severity.toLowerCase()}`} title={r.detail}>
-                  <span className="risk-head">{r.headline}</span>
-                  <span className="risk-detail">{r.detail}</span>
-                </div>
-              ))}
+              <div className="eyebrow risks-title">
+                What breaks next
+                <span className="risks-hint">legal right now, one delay from not being</span>
+              </div>
+              <div className="risks-row">
+                {view.risks.map((r) => (
+                  <div key={r.id} className={`risk ${r.severity.toLowerCase()}`} title={r.detail}>
+                    <span className="risk-head">{r.headline}</span>
+                    <span className="risk-detail">{r.detail}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
