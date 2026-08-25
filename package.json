@@ -9,7 +9,8 @@
     "demo": "tsx scripts/demo.ts",
     "disrupt": "tsx scripts/disrupt.ts",
     "stress": "tsx scripts/stress.ts",
-    "check": "tsc --noEmit && tsx scripts/session-check.ts && tsx scripts/render-check.tsx && tsx scripts/stress.ts 40"
+    "check": "tsc --noEmit && tsx scripts/session-check.ts && tsx scripts/render-check.tsx && tsx scripts/interaction-check.ts && tsx scripts/stress.ts 40",
+    "interaction": "tsx scripts/interaction-check.ts"
   },
   "dependencies": {
     "@types/react": "^19.2.18",
@@ -21,7 +22,8 @@
     "typescript": "^7.0.2"
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.3.0",
-    "tsx": "^4.23.12"
+    "jsdom": "^30.0.1"
   }
 }
