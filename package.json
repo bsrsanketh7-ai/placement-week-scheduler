@@ -1,0 +1,27 @@
+{
+  "name": "placement-week-scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "demo": "tsx scripts/demo.ts",
+    "disrupt": "tsx scripts/disrupt.ts",
+    "stress": "tsx scripts/stress.ts",
+    "check": "tsc --noEmit && tsx scripts/session-check.ts && tsx scripts/render-check.tsx && tsx scripts/stress.ts 40"
+  },
+  "dependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "esbuild": "^0.28.2",
+    "next": "^16.3.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "tsx": "^4.23.12"
+  }
+}
