@@ -48,6 +48,7 @@ export default function Dashboard() {
   const [delay, setDelay] = useState(180);
   const [withdrawCount, setWithdrawCount] = useState(15);
   const [previewing, setPreviewing] = useState(false);
+  const [showUnplaced, setShowUnplaced] = useState(false);
 
   const now = globalSlot(day, DAY_START_MIN + nowSlotInDay * SLOT_MINUTES);
 
@@ -102,6 +103,18 @@ export default function Dashboard() {
     if (!byRoom.has(a.roomId)) byRoom.set(a.roomId, []);
     byRoom.get(a.roomId)!.push(a);
   }
+  /**
+   * A room hosts one panel for the whole day, so the company name belongs in
+   * the gutter once rather than stamped on all fourteen blocks in the row.
+   * That frees the block itself to carry the thing that actually varies: who
+   * is being interviewed.
+   */
+  const panelByRoom = new Map<string, string>();
+  for (const p of view.engine.panels.values()) {
+    if (p.day !== day || p.dropped || !p.roomId) continue;
+    panelByRoom.set(p.roomId, view.engine.companies.get(p.companyId)?.name ?? '');
+  }
+
   const ghostsByRoom = new Map<string, typeof ghosts>();
   for (const g of ghosts) {
     const room = rooms.find((r) => r.name === g.room || r.id === g.room);
@@ -171,10 +184,14 @@ export default function Dashboard() {
           <div className="stat-value">{Math.round(m.avgStudentIdleMinutes)}m</div>
           <div className="stat-label">avg student wait</div>
         </div>
-        <div className="stat">
+        <button
+          className={`stat statbtn ${showUnplaced ? 'open' : ''}`}
+          onClick={() => setShowUnplaced((v) => !v)}
+          title="Show what did not fit and why"
+        >
           <div className="stat-value">{view.schedule.unscheduled.length}</div>
-          <div className="stat-label">unplaced</div>
-        </div>
+          <div className="stat-label">unplaced &middot; why?</div>
+        </button>
       </header>
 
       <div className="main">
@@ -355,7 +372,10 @@ export default function Dashboard() {
                 const gs = ghostsByRoom.get(room.id) ?? [];
                 return (
                   <React.Fragment key={room.id}>
-                    <div className={`roomlabel ${retired ? 'retired' : ''}`}>{room.name}</div>
+                    <div className={`roomlabel ${retired ? 'retired' : ''}`}>
+                      <span className="rl-room">{room.name}</span>
+                      <span className="rl-company">{panelByRoom.get(room.id) ?? ''}</span>
+                    </div>
                     <div className="track" style={{ width: `calc(var(--slot-w) * ${SLOTS_PER_DAY})` }}>
                       <div
                         className="freeze"
@@ -392,7 +412,7 @@ export default function Dashboard() {
                               width: `calc(var(--slot-w) * ${a.endSlot - a.startSlot} - 2px)`,
                             }}
                           >
-                            {company?.name.split(' ')[0]}
+                            {student?.name.split(' ')[0]}
                           </div>
                         );
                       })}
@@ -415,6 +435,75 @@ export default function Dashboard() {
           </div>
         </section>
       </div>
+
+      {showUnplaced && !diff && (
+        <div className="summary">
+          <div className="summary-head">
+            <div>
+              <div className="eyebrow">What did not fit, and why</div>
+              <div className="stat-value" style={{ marginTop: 4 }}>
+                {view.schedule.unscheduled.length} unplaced
+                <span style={{ fontSize: 13, color: 'var(--ink-faint)' }}>
+                  {' '}of {view.metrics.demandedInterviews} wanted
+                </span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 220, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.4 }}>
+              Not a crash and not a silent drop. Every interview below has a named
+              reason. The week is oversubscribed by design, so the question is not
+              whether something gets cut but who decides what.
+            </div>
+            <div className="btnrow" style={{ minWidth: 120 }}>
+              <button className="btn secondary" onClick={() => setShowUnplaced(false)}>Close</button>
+            </div>
+          </div>
+
+          <div className="changelist">
+            <div className="changecol">
+              <h4>By reason</h4>
+              <ul>
+                {Object.entries(view.unscheduledBreakdown.byReason).map(([reason, n]) => (
+                  <li className="cancel" key={reason}>
+                    <span className="num">{n as number}</span> &middot; {reasonText(reason)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="changecol">
+              <h4>Worst affected companies</h4>
+              <ul>
+                {view.unscheduledBreakdown.worstAffected.map((w, i) => (
+                  <li className="cancel" key={i}>
+                    {w.company}<br />
+                    <span className="when">
+                      {w.unscheduled} of {w.demanded} could not be placed &middot; {w.tier.toLowerCase().replace('_', ' ')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="changecol">
+              <h4>Where the shortfall is</h4>
+              <ul>
+                {view.metrics.perDay.map((f) => (
+                  <li className={f.oversubscribedPct > 0 ? 'cancel' : 'info'} key={f.day}>
+                    Day {f.day} &middot; <span className="num">{f.coveragePct.toFixed(0)}%</span> placed
+                    <br />
+                    <span className="when">
+                      {f.panelsRequested} panels wanted, {f.roomsAvailable} rooms
+                      {f.oversubscribedPct > 0
+                        ? ` · ${f.oversubscribedPct.toFixed(0)}% oversubscribed`
+                        : ' · fits'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {diff && (
         <div className="summary">
@@ -526,6 +615,19 @@ export default function Dashboard() {
       )}
     </div>
   );
+}
+
+/** Reason codes are for the log. Coordinators get sentences. */
+function reasonText(code: string): string {
+  switch (code) {
+    case 'NO_PANEL_CAPACITY': return 'the company ran out of panel time in its window';
+    case 'STUDENT_FULLY_BOOKED': return 'the student clashed with every free slot';
+    case 'NO_ROOM_FOR_PANEL': return 'the company got no room for that panel';
+    case 'COMPANY_WINDOW_TOO_SHORT': return 'the company was on site too briefly';
+    case 'STUDENT_WITHDRAWN': return 'the student withdrew';
+    case 'PANEL_DROPPED': return 'the panel dropped out';
+    default: return code;
+  }
 }
 
 function describeDisruption(d: Disruption, view: ReturnType<typeof runSession>): string {
