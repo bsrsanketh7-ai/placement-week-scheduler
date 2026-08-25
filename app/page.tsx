@@ -349,7 +349,7 @@ export default function Dashboard() {
                 ))}
               </div>
 
-              {rooms.map((room) => {
+              {rooms.map((room, roomIndex) => {
                 const retired = !liveRoomIds.has(room.id);
                 const items = byRoom.get(room.id) ?? [];
                 const gs = ghostsByRoom.get(room.id) ?? [];
@@ -397,7 +397,7 @@ export default function Dashboard() {
                         );
                       })}
                       <div
-                        className="nowline"
+                        className={`nowline ${roomIndex === 0 ? 'labelled' : ''}`}
                         style={{ left: `calc(var(--slot-w) * ${nowSlotInDay})` }}
                       />
                     </div>

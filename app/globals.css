@@ -226,10 +226,10 @@ html, body {
   z-index: 3;
   pointer-events: none;
 }
-.nowline::before {
+.nowline.labelled::before {
   content: "NOW";
   position: absolute;
-  top: -16px; left: -10px;
+  top: -16px; left: 2px;
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.08em;
