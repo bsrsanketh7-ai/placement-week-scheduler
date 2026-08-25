@@ -62,7 +62,7 @@ function byLabel(tag: string, label: string) {
     HTMLElement | undefined;
 }
 
-async function click(el: Element | undefined, what: string) {
+async function click(el: Element | null | undefined, what: string) {
   if (!el) throw new Error(`could not find ${what}`);
   await act(async () => {
     el.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -91,6 +91,25 @@ check('interviews are on the board', $$('.block').length > 100);
 check('the NOW label appears exactly once', $$('.nowline.labelled').length === 1);
 check('no summary before previewing', $('.summary') === null);
 check('no ghosts before previewing', $$('.ghost').length === 0);
+
+/* ---------- the unplaced breakdown ---------- */
+// The brief is explicit that nothing may fail silently, so the unplaced count
+// has to be openable and every entry has to carry a stated reason.
+check('the room gutter names the company holding it',
+  $$('.rl-company').some((el) => (el.textContent ?? '').length > 0));
+check('blocks carry student names, not repeated company names', (() => {
+  const row = $$('.track')[2];
+  const labels = [...row.querySelectorAll('.block')].map((b) => b.textContent);
+  return new Set(labels).size > 1;
+})(), 'a room row shows more than one distinct label');
+
+await click($('.statbtn'), 'unplaced stat button');
+check('the unplaced count opens a breakdown', $('.summary') !== null);
+check('reasons are given in plain language', /ran out of panel time|clashed with every free slot/.test(text()));
+check('worst affected companies are named', /could not be placed/.test(text()));
+check('the per day shortfall is shown', /oversubscribed|fits/.test(text()));
+await click(byLabel('button', 'Close'), 'close button');
+check('the breakdown closes again', $('.summary') === null);
 
 /* ---------- build a three part disruption ---------- */
 // Onward Digital is the biggest Day 1 recruiter in seed 42.

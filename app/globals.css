@@ -36,7 +36,7 @@
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif;
 
   --slot-w: 26px;
-  --row-h: 22px;
+  --row-h: 30px;
 }
 
 * { box-sizing: border-box; }
@@ -89,6 +89,23 @@ html, body {
 .stat-value { font-family: var(--mono); font-size: 18px; line-height: 1; font-variant-numeric: tabular-nums; }
 .stat-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
 .stat.bad .stat-value { color: var(--red); }
+
+/* The unplaced count is the one number a coordinator must be able to open.
+   Making it a button says so before anyone reads a tooltip. */
+.statbtn {
+  appearance: none;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  border-radius: 4px;
+  padding: 5px 10px;
+  margin: -5px 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.statbtn:hover { background: var(--panel-sunk); border-color: var(--rule-strong); }
+.statbtn.open { border-color: var(--blue); background: var(--blue-wash); }
+.statbtn .stat-label { color: var(--blue); }
 .stat.good .stat-value { color: var(--green); }
 
 .main { display: flex; flex: 1; min-height: 0; align-items: stretch; }
@@ -133,7 +150,7 @@ html, body {
 
 .timeline {
   display: grid;
-  grid-template-columns: 74px 1fr;
+  grid-template-columns: 108px 1fr;
   gap: 0;
   min-width: max-content;
 }
@@ -149,18 +166,36 @@ html, body {
 }
 .ruler-cell.hour { border-left-color: var(--rule-strong); color: var(--ink-soft); }
 
+/* Two lines: the room code, and the company holding it that day. Naming the
+   company once here is what lets every block in the row carry a student name
+   instead of repeating the same word fourteen times. */
 .roomlabel {
   height: var(--row-h);
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
   padding-right: 10px;
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+}
+.rl-room {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--ink-soft);
-  border-bottom: 1px solid var(--rule);
+  line-height: 1.1;
+  color: var(--ink);
 }
-.roomlabel.retired { color: var(--red); text-decoration: line-through; }
+.rl-company {
+  font-size: 9px;
+  line-height: 1.1;
+  color: var(--ink-faint);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roomlabel.retired .rl-room { color: var(--red); text-decoration: line-through; }
 
 .track {
   position: relative;
@@ -179,16 +214,17 @@ html, body {
 
 .block {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
+  top: 3px;
+  bottom: 3px;
   border-radius: 2px;
   background: var(--blue-wash);
   border-left: 2px solid var(--blue);
   font-size: 10px;
   line-height: 1;
-  padding: 4px 3px 0;
+  padding: 6px 3px 0;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--ink);
   cursor: default;
 }
@@ -202,8 +238,8 @@ html, body {
    behind "how much reshuffling is acceptable". */
 .ghost {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
+  top: 3px;
+  bottom: 3px;
   border: 1px dashed var(--red);
   border-radius: 2px;
   background: repeating-linear-gradient(
@@ -226,6 +262,8 @@ html, body {
   z-index: 3;
   pointer-events: none;
 }
+/* Only the topmost row carries the label. Repeating it on every room turns a
+   time marker into a wall of badges that covers the room codes. */
 .nowline.labelled::before {
   content: "NOW";
   position: absolute;
