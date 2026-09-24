@@ -1,11 +1,13 @@
-/** Smoke test: the dashboard must render without throwing, on real data. */
+/** Smoke test: both pages must render without throwing, on real data. */
 import { renderToString } from 'react-dom/server';
 import React from 'react';
-import Dashboard from '../app/page';
+import Dashboard from '../app/console/page';
+import Landing from '../app/page';
 
 const t0 = Date.now();
 const html = renderToString(React.createElement(Dashboard));
 const ms = Date.now() - t0;
+const landing = renderToString(React.createElement(Landing));
 
 const checks: Array<[string, boolean]> = [
   ['renders room labels', /A-101/.test(html)],
@@ -15,6 +17,8 @@ const checks: Array<[string, boolean]> = [
   ['renders interview blocks', (html.match(/class="block/g) ?? []).length > 20],
   ['shows coverage', /interviews placed/.test(html)],
   ['no summary before preview', !/Cost of this replan/.test(html)],
+  ['landing page renders its hero', /Placement week goes wrong/.test(landing)],
+  ['landing page links to the console', /href="\/console"/.test(landing)],
 ];
 
 let failed = 0;

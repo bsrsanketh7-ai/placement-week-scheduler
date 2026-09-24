@@ -5,7 +5,7 @@ Scheduling and live replanning for a placement week: 35 companies, 800 students,
 
 ```bash
 npm install
-npm run dev      # the coordinator's console at localhost:3000
+npm run dev      # landing page at localhost:3000, the console at /console
 npm run demo     # generate a dataset and schedule it, print metrics
 npm run disrupt  # run the "biggest recruiter is 3 hours late" scenario
 npm run stress   # 450+ randomised replans, asserting invariants
@@ -168,8 +168,13 @@ The stress test found two real bugs that the happy path never touched:
 
 ## The console
 
-Three things on screen: current state across the top, what is about to break in
-the strip above the grid, and the grid itself.
+The console lives at `/console`; `/` is a short landing page that explains the
+approach and links to it.
+
+Layout: the replan builder on the left (a drawer on narrow screens), then KPI
+cards, the day tabs, what is about to break, and the board itself. Light and
+dark themes follow the system setting, with a toggle in the header that is
+remembered. Every animation switches off under `prefers-reduced-motion`.
 
 **Upcoming conflicts** are forward looking on purpose. Clashes and double
 bookings are zero by construction, so listing them would be a row that is always
@@ -201,7 +206,18 @@ byte-identical schedules.
 Nothing commits without being previewed first. The grid shows moved interviews
 in green and leaves a dashed struck-through trace where each one used to sit, so
 the amount of board being redrawn is visible before the coordinator accepts it.
-The change list is for after she has decided.
+While a preview is open, each KPI card shows its change against the committed
+schedule, and the cost docks to the bottom of the screen rather than covering
+the board; it collapses to one line when she wants the grid back. The change
+list is for after she has decided. Applying confirms with a toast that carries
+its own undo.
+
+The unplaced count opens a dialog that breaks every unplaced interview down by
+reason, company and day.
+
+Colour is strictly semantic on the board: blue booked, green moved, red lost,
+amber needs a decision. The violet accent is only ever chrome, so it cannot be
+mistaken for any of them.
 
 ---
 
@@ -218,7 +234,11 @@ src/core/
   metrics.ts    metrics + independent invariant verification
   risks.ts      forward-looking conflict detection
   session.ts    deterministic replay for preview and undo
-app/            coordinator console
+app/
+  page.tsx      landing page
+  console/      the coordinator console (all state lives here)
+  _components/  presentational pieces for both pages
+  styles/       page stylesheets; globals.css holds the design tokens
 scripts/        demo, disruption scenario, fuzz test, checks
 ```
 

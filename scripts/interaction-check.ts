@@ -31,6 +31,8 @@ const put = (key: string, value: unknown) =>
   Object.defineProperty(g, key, { value, writable: true, configurable: true });
 
 put('window', dom.window);
+// next/link schedules prefetching through `self`, the browser global alias.
+put('self', dom.window);
 put('document', dom.window.document);
 put('navigator', dom.window.navigator);
 put('HTMLElement', dom.window.HTMLElement);
@@ -46,7 +48,7 @@ put('IS_REACT_ACT_ENVIRONMENT', true);
 
 const { createRoot } = await import('react-dom/client');
 const { act } = await import('react');
-const Dashboard = (await import('../app/page')).default;
+const Dashboard = (await import('../app/console/page')).default;
 
 const container = dom.window.document.getElementById('root')!;
 const root = createRoot(container);
@@ -130,13 +132,13 @@ await setSelect('co', onward!.value);
 await click(byLabel('button', 'Add to this replan'), 'add button');
 check('a queued disruption appears', $$('.queued li').length === 1, text().slice(0, 0));
 
-await setSelect('kind', 'PANEL_DROP');
+await click($('[data-kind="PANEL_DROP"]'), 'panel drop tile');
 const panelSelect = $('#pn') as HTMLSelectElement;
 const onwardPanel = [...panelSelect.options].find((o) => o.text.includes('Onward Digital'));
 await setSelect('pn', onwardPanel!.value);
 await click(byLabel('button', 'Add to this replan'), 'add button');
 
-await setSelect('kind', 'STUDENT_WITHDRAW');
+await click($('[data-kind="STUDENT_WITHDRAW"]'), 'withdrawal tile');
 await click(byLabel('button', 'Add to this replan'), 'add button');
 check('three disruptions are queued', $$('.queued li').length === 3);
 check('still nothing committed', $('.summary') === null);
