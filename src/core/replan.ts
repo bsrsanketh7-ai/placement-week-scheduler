@@ -40,9 +40,8 @@
 
 import { ScheduleEngine } from './engine';
 import {
-  Assignment, Schedule, Unscheduled,
-  SLOT_MINUTES, durationToSlots, formatSlot, slotToDay, globalSlot,
-  SLOTS_PER_DAY, minuteOfDayToSlotInDay,
+  Assignment, Schedule, Unscheduled, UnscheduledReason,
+  SLOT_MINUTES, formatSlot, SLOTS_PER_DAY, minuteOfDayToSlotInDay,
 } from './types';
 
 /* ------------------------------------------------------------------ */
@@ -124,6 +123,8 @@ export interface ReplanDiff {
     displacedCount: number;
     volunteeredCount: number;
     movedPctOfFuture: number;
+    /** Movable interviews ahead of the notice window when the replan started. */
+    futureCount: number;
     studentsAffected: number;
     companiesAffected: number;
     noticeViolations: number;
@@ -157,7 +158,7 @@ export function replan(
     moved: [], roomChanged: [], cancelled: [], added: [],
     frozen: 0, untouched: 0, escalations: [],
     churn: {
-      displacedCount: 0, volunteeredCount: 0, movedPctOfFuture: 0,
+      displacedCount: 0, volunteeredCount: 0, movedPctOfFuture: 0, futureCount: 0,
       studentsAffected: 0, companiesAffected: 0, noticeViolations: 0,
     },
     notifications: { students: [], companies: [] },
@@ -196,7 +197,13 @@ export function replan(
           // never past the end of its own day. A company that arrives too late
           // to interview at all loses the day; it does not silently roll into
           // tomorrow, because moving a company's day is the coordinator's call.
-          p.availableTo = Math.min(p.availableTo + Math.ceil(overtime / SLOT_MINUTES), dayEnd);
+          // Measured from the stated departure rather than the current window,
+          // so a second delay report cannot stack another hour of overtime.
+          const departure = p.day * SLOTS_PER_DAY + minuteOfDayToSlotInDay(company.departureMin);
+          p.availableTo = Math.min(
+            Math.max(p.availableTo, departure + Math.ceil(overtime / SLOT_MINUTES)),
+            dayEnd,
+          );
           p.availableFrom = Math.min(p.availableFrom + delaySlots, p.availableTo);
         }
         const dead = [...engine.panels.values()].filter(
@@ -248,7 +255,9 @@ export function replan(
       }
 
       case 'ROOM_UNAVAILABLE': {
-        const room = engine.rooms.get(d.roomId)!;
+        const room = engine.rooms.get(d.roomId);
+        // Already out of service, for example the same room reported twice.
+        if (!room) break;
         diff.disruptions.push(`Room ${room.name} unavailable`);
         // A room dying does not have to move any student: if a spare room
         // exists, the panel relocates and only the venue changes. This is the
@@ -330,7 +339,7 @@ export function replan(
   toReplace.sort((x, y) => x.a.startSlot - y.a.startSlot);
 
   let volunteered = 0;
-  const stillUnplaced: Array<{ a: Assignment; reason: string }> = [];
+  const stillUnplaced: Array<{ a: Assignment; reason: string; code: UnscheduledReason }> = [];
 
   /* ---- Phase 1: free capacity only, anchored near the original time ---- */
   for (const item of toReplace) {
@@ -343,12 +352,16 @@ export function replan(
       const placed = engine.place(a.companyId, a.studentId, res.candidate);
       recordMove(engine, diff, a, placed, 'DISPLACED');
     } else {
-      stillUnplaced.push({ ...item, reason: res.reason === 'STUDENT_WITHDRAWN' ? item.reason : res.detail });
+      stillUnplaced.push({
+        ...item,
+        reason: res.reason === 'STUDENT_WITHDRAWN' ? item.reason : res.detail,
+        code: res.reason,
+      });
     }
   }
 
   /* ---- Phase 2: bounded Ring 2 displacement ---- */
-  const leftover: Array<{ a: Assignment; reason: string }> = [];
+  const leftover: Array<{ a: Assignment; reason: string; code: UnscheduledReason }> = [];
 
   for (const item of stillUnplaced) {
     if (volunteered >= maxDisplacements) { leftover.push(item); continue; }
@@ -504,6 +517,7 @@ export function replan(
 
   diff.churn.studentsAffected = touchedStudents.size;
   diff.churn.companiesAffected = touchedCompanies.size;
+  diff.churn.futureCount = futureCountBefore;
   diff.churn.movedPctOfFuture = futureCountBefore
     ? (diff.moved.length / futureCountBefore) * 100 : 0;
   diff.churn.noticeViolations = diff.moved.filter((m) => m.toSlot < protectedUntil).length;
@@ -540,13 +554,18 @@ export function replan(
   return {
     schedule: {
       assignments: after,
+      /**
+       * Only interviews a student still wants count as unplaced. A student who
+       * withdrew is not a scheduling failure, and neither is any interview of
+       * theirs that was already unplaced before they left.
+       */
       unscheduled: [
-        ...schedule.unscheduled,
-        ...diff.cancelled.map((c) => ({
-          companyId: c.companyId,
-          studentId: c.studentId,
-          reason: 'NO_PANEL_CAPACITY' as const,
-          detail: c.reason,
+        ...schedule.unscheduled.filter((u) => !engine.students.get(u.studentId)?.withdrawn),
+        ...leftover.map(({ a, reason, code }) => ({
+          companyId: a.companyId,
+          studentId: a.studentId,
+          reason: code,
+          detail: reason,
         })),
       ],
       panelRooms,

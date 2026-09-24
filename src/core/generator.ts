@@ -135,14 +135,12 @@ export function generateDataset(seed = 42): Dataset {
   /* ---------------- companies ---------------- */
   const companies: Company[] = [];
   const panels: Panel[] = [];
-  let dayCursor: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
 
   for (const spec of TIER_SPECS) {
     const names = rng.shuffle(COMPANY_NAMES[spec.tier]);
     for (let i = 0; i < spec.count; i++) {
       const id = `C${String(companies.length + 1).padStart(2, '0')}`;
       const preferredDay = spec.days[i % spec.days.length];
-      dayCursor[preferredDay]++;
 
       const cutoff = Math.round(rng.normal(
         (spec.cgpaCutoff[0] + spec.cgpaCutoff[1]) / 2, 0.25,

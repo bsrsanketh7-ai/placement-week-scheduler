@@ -13,7 +13,7 @@ import { buildSchedule } from '../src/core/scheduler';
 import { computeMetrics } from '../src/core/metrics';
 import { replan, Disruption } from '../src/core/replan';
 import { Rng } from '../src/core/rng';
-import { globalSlot } from '../src/core/types';
+import { globalSlot, minuteOfDayToSlotInDay, SLOTS_PER_DAY } from '../src/core/types';
 
 const SEEDS = Number(process.argv[2] ?? 25);
 const ROUNDS_PER_SEED = 4; // disruptions land on top of each other, like a real day
@@ -86,6 +86,24 @@ for (let seed = 1; seed <= SEEDS; seed++) {
     if (m.roomDoubleBookings) problems.push(`${m.roomDoubleBookings} room double bookings`);
     if (m.panelDoubleBookings) problems.push(`${m.panelDoubleBookings} panel double bookings`);
     if (diff.churn.noticeViolations) problems.push(`${diff.churn.noticeViolations} notice violations`);
+
+    // Overtime is capped against the stated departure, however many delays land.
+    for (const p of engine.panels.values()) {
+      const c = engine.companies.get(p.companyId)!;
+      const cap = Math.min(
+        p.day * SLOTS_PER_DAY + minuteOfDayToSlotInDay(c.departureMin + 60),
+        (p.day + 1) * SLOTS_PER_DAY,
+      );
+      if (p.availableTo > cap) problems.push(`${p.label} runs past its overtime cap`);
+    }
+
+    // A student who left is not an unplaced interview.
+    for (const u of schedule.unscheduled) {
+      if (engine.students.get(u.studentId)?.withdrawn) {
+        problems.push(`withdrawn student ${u.studentId} counted as unplaced`);
+        break;
+      }
+    }
 
     // Nothing frozen may ever move.
     for (const mv of diff.moved) {

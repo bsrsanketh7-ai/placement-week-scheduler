@@ -19,15 +19,25 @@
 
 import React, { useMemo, useState } from 'react';
 import { runSession, SessionStep } from '../src/core/session';
+import { upcomingRisks } from '../src/core/risks';
 import { Disruption } from '../src/core/replan';
 import {
   SLOTS_PER_DAY, SLOT_MINUTES, DAY_START_MIN,
-  slotToDay, slotWithinDay, globalSlot, formatSlot,
+  slotToDay, slotWithinDay, globalSlot, formatSlot, durationToSlots,
 } from '../src/core/types';
 
 const SEED = 42;
 const NOTICE_SLOTS = 2;
 const MAX_DISPLACEMENTS = 12;
+const MAX_WITHDRAW = 80;
+
+const CONFIG = {
+  seed: SEED,
+  noticeSlots: NOTICE_SLOTS,
+  maxDisplacements: MAX_DISPLACEMENTS,
+  overtimeMinutes: 60,
+  backfillUnscheduled: false,
+};
 
 type DraftKind = 'COMPANY_LATE' | 'PANEL_DROP' | 'STUDENT_WITHDRAW' | 'ROOM_UNAVAILABLE';
 
@@ -52,26 +62,21 @@ export default function Dashboard() {
 
   const now = globalSlot(day, DAY_START_MIN + nowSlotInDay * SLOT_MINUTES);
 
-  const config = {
-    seed: SEED,
-    noticeSlots: NOTICE_SLOTS,
-    maxDisplacements: MAX_DISPLACEMENTS,
-    overtimeMinutes: 60,
-    backfillUnscheduled: false,
-  };
-
-  // Committed state. Recomputed from the disruption log, never mutated.
-  const committed = useMemo(() => runSession(config, history, undefined, now), [history, now]);
+  // Committed state. Recomputed from the disruption log, never mutated. Each
+  // step carries its own time, so moving the clock does not need a rebuild;
+  // only the forward-looking risks depend on it, and those are computed below.
+  const committed = useMemo(() => runSession(CONFIG, history), [history]);
 
   // Preview state: the same log with the draft appended. Both exist at once,
   // which is what lets the grid show before and after together.
   const preview = useMemo(() => {
     if (!previewing || draft.length === 0) return null;
-    return runSession(config, history, { disruptions: draft, at: now }, now);
+    return runSession(CONFIG, history, { disruptions: draft, at: now }, now);
   }, [previewing, draft, history, now]);
 
   const view = preview ?? committed;
   const diff = preview?.lastDiff ?? null;
+  const risks = useMemo(() => upcomingRisks(view.engine, view.schedule, now), [view, now]);
 
   const dayCompanies = committed.dataset.companies.filter((c) => c.preferredDay === day);
   const dayPanels = [...committed.engine.panels.values()].filter(
@@ -83,8 +88,13 @@ export default function Dashboard() {
     if (!diff) return [];
     return diff.moved
       .filter((m) => slotToDay(m.fromSlot) === day)
-      .map((m) => ({ room: m.fromRoom, start: m.fromSlot, student: m.studentName }));
-  }, [diff, day]);
+      .map((m) => ({
+        room: m.fromRoom,
+        start: m.fromSlot,
+        length: durationToSlots(view.engine.companies.get(m.companyId)?.interviewMinutes ?? 30),
+        student: m.studentName,
+      }));
+  }, [diff, day, view]);
 
   const movedIds = useMemo(
     () => new Set(diff ? diff.moved.map((m) => `${m.studentId}:${m.companyId}`) : []),
@@ -123,21 +133,38 @@ export default function Dashboard() {
     ghostsByRoom.get(key)!.push(g);
   }
 
+  function changeDay(d: number) {
+    // Company and panel pickers only list the viewed day, so a selection made
+    // on another tab would otherwise be queued invisibly.
+    setDay(d);
+    setCompanyId('');
+    setPanelId('');
+  }
+
   function addToDraft() {
+    // One entry per company, panel and room. Reporting the same room twice
+    // would try to retire it twice, and a repeated delay would stack.
+    const drafted = (pred: (x: Disruption) => boolean) => draft.some(pred);
     let d: Disruption | null = null;
-    if (kind === 'COMPANY_LATE' && companyId) {
+    if (kind === 'COMPANY_LATE' && dayCompanies.some((c) => c.id === companyId)) {
+      if (drafted((x) => x.type === 'COMPANY_LATE' && x.companyId === companyId)) return;
       d = { type: 'COMPANY_LATE', companyId, delayMinutes: delay };
-    } else if (kind === 'PANEL_DROP' && panelId) {
+    } else if (kind === 'PANEL_DROP' && dayPanels.some((p) => p.id === panelId)) {
+      if (drafted((x) => x.type === 'PANEL_DROP' && x.panelId === panelId)) return;
       d = { type: 'PANEL_DROP', panelId };
-    } else if (kind === 'ROOM_UNAVAILABLE' && roomId) {
+    } else if (kind === 'ROOM_UNAVAILABLE' && liveRoomIds.has(roomId)) {
+      if (drafted((x) => x.type === 'ROOM_UNAVAILABLE' && x.roomId === roomId)) return;
       d = { type: 'ROOM_UNAVAILABLE', roomId };
     } else if (kind === 'STUDENT_WITHDRAW') {
-      // Students who still have something ahead of them today.
+      // Students who still have a movable interview ahead of them today, and
+      // who are not already leaving in this draft.
+      const leaving = new Set(draft.flatMap((x) => (x.type === 'STUDENT_WITHDRAW' ? x.studentIds : [])));
+      const count = Math.max(1, Math.min(MAX_WITHDRAW, Math.floor(withdrawCount) || 1));
       const ids = [...new Set(
         committed.schedule.assignments
-          .filter((a) => a.startSlot > now + NOTICE_SLOTS)
+          .filter((a) => slotToDay(a.startSlot) === day && a.startSlot >= now + NOTICE_SLOTS)
           .map((a) => a.studentId),
-      )].slice(0, withdrawCount);
+      )].filter((id) => !leaving.has(id)).slice(0, count);
       if (ids.length) d = { type: 'STUDENT_WITHDRAW', studentIds: ids };
     }
     if (!d) return;
@@ -278,7 +305,7 @@ export default function Dashboard() {
             <div className="field">
               <label htmlFor="wd">How many students left</label>
               <input
-                id="wd" type="number" min={1} max={80}
+                id="wd" type="number" min={1} max={MAX_WITHDRAW}
                 value={withdrawCount} onChange={(e) => setWithdrawCount(Number(e.target.value))}
               />
             </div>
@@ -343,7 +370,7 @@ export default function Dashboard() {
                   role="tab"
                   aria-selected={day === d}
                   className={`daytab ${f.oversubscribedPct > 0 ? 'strained' : ''}`}
-                  onClick={() => setDay(d)}
+                  onClick={() => changeDay(d)}
                 >
                   Day {d + 1}
                   <span className="cov">
@@ -355,14 +382,14 @@ export default function Dashboard() {
             })}
           </div>
 
-          {view.risks.length > 0 && (
+          {risks.length > 0 && (
             <div className="risks">
               <div className="eyebrow risks-title">
                 What breaks next
                 <span className="risks-hint">legal right now, one delay from not being</span>
               </div>
               <div className="risks-row">
-                {view.risks.map((r) => (
+                {risks.map((r) => (
                   <div key={r.id} className={`risk ${r.severity.toLowerCase()}`} title={r.detail}>
                     <span className="risk-head">{r.headline}</span>
                     <span className="risk-detail">{r.detail}</span>
@@ -408,7 +435,7 @@ export default function Dashboard() {
                           title={`${g.student} was here before this replan`}
                           style={{
                             left: `calc(var(--slot-w) * ${slotWithinDay(g.start)})`,
-                            width: `calc(var(--slot-w) * 2)`,
+                            width: `calc(var(--slot-w) * ${g.length})`,
                           }}
                         />
                       ))}
@@ -494,7 +521,7 @@ export default function Dashboard() {
                   <li className="cancel" key={i}>
                     {w.company}<br />
                     <span className="when">
-                      {w.unscheduled} of {w.demanded} could not be placed &middot; {w.tier.toLowerCase().replace('_', ' ')}
+                      {w.unscheduled} of {w.demanded} could not be placed &middot; {w.tier.toLowerCase().replaceAll('_', ' ')}
                     </span>
                   </li>
                 ))}
@@ -530,7 +557,7 @@ export default function Dashboard() {
               <div className="stat-value" style={{ marginTop: 4 }}>
                 {diff.moved.length} moved
                 <span style={{ fontSize: 13, color: 'var(--ink-faint)' }}>
-                  {' '}of {Math.round(diff.moved.length / Math.max(churnPct, 0.01) * 100) || 0} ahead
+                  {' '}of {diff.churn.futureCount} ahead
                 </span>
               </div>
             </div>

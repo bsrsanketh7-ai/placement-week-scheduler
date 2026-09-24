@@ -8,8 +8,8 @@
 
 import {
   Assignment, Dataset, DayFeasibility, Metrics, Schedule,
-  SLOT_MINUTES, LUNCH_START_MIN, LUNCH_END_MIN, DAY_START_MIN, DAY_END_MIN,
-  slotToDay, slotToMinuteOfDay, durationToSlots,
+  SLOT_MINUTES, LUNCH_START_MIN, LUNCH_END_MIN, DAY_START_MIN, DAY_END_MIN, DAYS,
+  slotToDay,
 } from './types';
 
 const USABLE_MINUTES_PER_DAY =
@@ -32,7 +32,7 @@ export function computeMetrics(dataset: Dataset, schedule: Schedule): Metrics {
   const demandMinutes = dataset.companies.reduce(
     (n, c) => n + liveQueue(c).length * c.interviewMinutes, 0,
   );
-  const capacityMinutes = dataset.rooms.length * 4 * USABLE_MINUTES_PER_DAY;
+  const capacityMinutes = dataset.rooms.length * DAYS * USABLE_MINUTES_PER_DAY;
 
   /* ---- invariant checks, recomputed from scratch ---- */
   let studentClashes = 0;
@@ -114,9 +114,9 @@ export function computeMetrics(dataset: Dataset, schedule: Schedule): Metrics {
    * half empty. Companies will not move days without approval, so slack on
    * Day 4 does not help Day 1. Shortfall is therefore summed per day.
    */
-  const perDay = [];
+  const perDay: DayFeasibility[] = [];
   let shortfallMinutes = 0;
-  for (let d = 0; d < 4; d++) {
+  for (let d = 0; d < DAYS; d++) {
     const dayCompanies = dataset.companies.filter((c) => c.preferredDay === d);
     const dDemand = dayCompanies.reduce((n, c) => n + liveQueue(c).length * c.interviewMinutes, 0);
     const dCapacity = dataset.rooms.length * USABLE_MINUTES_PER_DAY;
@@ -162,6 +162,7 @@ export function computeMetrics(dataset: Dataset, schedule: Schedule): Metrics {
  */
 export function explainUnscheduled(dataset: Dataset, schedule: Schedule) {
   const companies = new Map(dataset.companies.map((c) => [c.id, c]));
+  const withdrawn = new Set(dataset.students.filter((s) => s.withdrawn).map((s) => s.id));
   const byReason = new Map<string, number>();
   const byCompany = new Map<string, number>();
 
@@ -177,7 +178,8 @@ export function explainUnscheduled(dataset: Dataset, schedule: Schedule) {
       company: companies.get(cid)!.name,
       tier: companies.get(cid)!.tier,
       unscheduled: n,
-      demanded: companies.get(cid)!.interviewQueue.length,
+      // Same live demand computeMetrics uses, so the two panels agree.
+      demanded: companies.get(cid)!.interviewQueue.filter((sid) => !withdrawn.has(sid)).length,
     }));
 
   return { byReason: Object.fromEntries(byReason), worstAffected: worst };

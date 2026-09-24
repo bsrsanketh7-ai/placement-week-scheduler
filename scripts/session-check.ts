@@ -4,7 +4,7 @@
  * the day. So it gets tested directly.
  */
 import { runSession, SessionStep } from '../src/core/session';
-import { globalSlot } from '../src/core/types';
+import { globalSlot, minuteOfDayToSlotInDay, SLOTS_PER_DAY } from '../src/core/types';
 
 const config = {
   seed: 42, noticeSlots: 2, maxDisplacements: 12,
@@ -31,6 +31,32 @@ const previewed = runSession(config, [], step);
 const applied = runSession(config, [step]);
 const undone = runSession(config, []);
 
+// A withdrawal is capacity handed back, never a scheduling failure.
+const leavers = [...new Set(
+  base.schedule.assignments.filter((a) => a.startSlot >= now + 2).map((a) => a.studentId),
+)].slice(0, 15);
+const withdrew = runSession(config, [{ at: now, disruptions: [{ type: 'STUDENT_WITHDRAW', studentIds: leavers }] }]);
+const leaverSet = new Set(leavers);
+
+// The same room reported twice in one replan.
+let duplicateRoomThrew = false;
+try {
+  runSession(config, [], { at: now, disruptions: [
+    { type: 'ROOM_UNAVAILABLE', roomId: 'R1' },
+    { type: 'ROOM_UNAVAILABLE', roomId: 'R1' },
+  ] });
+} catch {
+  duplicateRoomThrew = true;
+}
+
+// Repeated delay reports must not stack overtime past the cap.
+const early = base.dataset.companies.find((c) => c.departureMin <= 16 * 60)!;
+const lateAt = globalSlot(early.preferredDay, 10 * 60);
+const lateStep: SessionStep = { at: lateAt, disruptions: [{ type: 'COMPANY_LATE', companyId: early.id, delayMinutes: 30 }] };
+const late = runSession(config, [lateStep, lateStep, lateStep]);
+const overtimeCap = early.preferredDay * SLOTS_PER_DAY
+  + minuteOfDayToSlotInDay(early.departureMin + config.overtimeMinutes);
+
 const checks: Array<[string, boolean]> = [
   ['rebuild is deterministic', fingerprint(base) === fingerprint(baseAgain)],
   ['preview matches what applying produces', fingerprint(previewed) === fingerprint(applied)],
@@ -39,6 +65,14 @@ const checks: Array<[string, boolean]> = [
   ['preview carries a diff', previewed.lastDiff !== null],
   ['committed view carries no diff', applied.lastDiff === null],
   ['rebuild is fast enough to be interactive', base.rebuildMs < 500],
+  ['withdrawals do not raise the unplaced count',
+    withdrew.schedule.unscheduled.length <= base.schedule.unscheduled.length],
+  ['withdrawn students are not listed as unplaced',
+    withdrew.schedule.unscheduled.every((u) => !leaverSet.has(u.studentId))],
+  ['the same room reported twice does not crash', !duplicateRoomThrew],
+  ['repeated delays do not stack overtime past the cap',
+    [...late.engine.panels.values()].filter((p) => p.companyId === early.id)
+      .every((p) => p.availableTo <= overtimeCap)],
 ];
 
 let failed = 0;

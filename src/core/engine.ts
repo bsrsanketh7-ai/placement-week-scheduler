@@ -9,9 +9,10 @@
  *
  * Invariants the engine maintains at all times:
  *   I1  A panel never has two overlapping interviews.
- *   I2  A room never has two overlapping interviews (holds by construction:
- *       a panel owns its room for the day, so panel exclusivity implies room
- *       exclusivity). Verified independently in metrics.ts anyway.
+ *   I2  A room never has two overlapping interviews. Tracked explicitly in
+ *       roomBusy rather than inferred from panel exclusivity, because a panel
+ *       that relocates leaves a running interview behind in the room it
+ *       vacated. Verified independently in metrics.ts as well.
  *   I3  A student is never in two interviews at once, and always has enough
  *       buffer to physically walk between rooms.
  *   I4  No interview straddles lunch, crosses midnight, or falls outside its
@@ -19,9 +20,9 @@
  */
 
 import {
-  Assignment, Company, Dataset, Panel, Room, Student, Unscheduled, UnscheduledReason,
-  SLOTS_PER_DAY, TOTAL_SLOTS, durationToSlots, spanIsUsable, travelSlots,
-  slotToDay, formatSlot,
+  Assignment, Company, Dataset, Panel, Room, Student, UnscheduledReason,
+  SLOTS_PER_DAY, DAYS, durationToSlots, spanIsUsable, travelSlots,
+  formatSlot,
 } from './types';
 
 interface StudentInterval {
@@ -76,7 +77,7 @@ export class ScheduleEngine {
     this.panels = new Map(dataset.panels.map((p) => [p.id, { ...p }]));
     for (const p of this.panels.values()) this.panelBusy.set(p.id, new Set());
     for (const r of this.rooms.values()) this.roomBusy.set(r.id, new Set());
-    for (let d = 0; d < 4; d++) this.roomOwner.push(new Map());
+    for (let d = 0; d < DAYS; d++) this.roomOwner.push(new Map());
   }
 
   /* ---------------------------------------------------------------- */
@@ -94,7 +95,7 @@ export class ScheduleEngine {
   allocateRooms(): { panelId: string; roomId: string }[] {
     const allocated: { panelId: string; roomId: string }[] = [];
 
-    for (let day = 0; day < 4; day++) {
+    for (let day = 0; day < DAYS; day++) {
       const dayPanels = [...this.panels.values()].filter(
         (p) => !p.dropped && p.roomId === null && p.day === day && p.availableFrom < p.availableTo,
       );
